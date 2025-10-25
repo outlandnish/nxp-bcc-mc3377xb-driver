@@ -1,0 +1,31 @@
+{
+  "name": "NXP MC3377xB Battery Cell Controller Driver",
+  "version": "1.0.0",
+  "description": "",
+  "keywords": [
+    "MC33664",
+    "MC33771B",
+    "MC33772B",
+    "NXP",
+    "automotive",
+    "battery management",
+    "battery cell controller",
+    "SPI"
+  ],
+  "authors": [
+    {
+      "name": "outlandnish",
+      "maintainer": true
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/outlandnish/nxp-mc33664b-driver.git"
+  },
+  "license": "MIT",
+  "frameworks": "arduino",
+  "platforms": "STM32",
+  "dependencies": {
+    "SPI": "*"
+  }
+}
