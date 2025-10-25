@@ -41,12 +41,20 @@ public:
       case BCC_STATUS_SUCCESS:        return "Success";
       case BCC_STATUS_SPI_INIT:       return "SPI initialization failed";
       case BCC_STATUS_SPI_BUSY:       return "SPI bus busy";
-      case BCC_STATUS_SPI_TX:         return "SPI transmission error";
-      case BCC_STATUS_SPI_RX:         return "SPI reception error";
-      case BCC_STATUS_TIMEOUT:        return "Communication timeout";
-      case BCC_STATUS_CRC:            return "CRC check failed";
       case BCC_STATUS_PARAM_RANGE:    return "Parameter out of range";
-      case BCC_STATUS_COM_STATUS:     return "Communication status error";
+      case BCC_STATUS_CRC:            return "CRC check failed";
+      case BCC_STATUS_COM_TAG_ID:     return "Tag ID mismatch";
+      case BCC_STATUS_COM_RC:         return "Rolling Counter mismatch";
+      case BCC_STATUS_COM_TIMEOUT:    return "Communication timeout";
+      case BCC_STATUS_DIAG_FAIL:      return "Diagnostic mode entry failed";
+      case BCC_STATUS_EEPROM_ERROR:   return "EEPROM communication error";
+      case BCC_STATUS_EEPROM_PRESENT: return "EEPROM not present";
+      case BCC_STATUS_NULL_RESP:      return "Null response from device";
+      case BCC_STATUS_SPI_FAIL:       return "SPI communication failure";
+      case BCC_STATUS_COM_ECHO:       return "Echo frame mismatch";
+      case BCC_STATUS_COM_MSG_CNT:    return "Message counter mismatch";
+      case BCC_STATUS_DATA_RDY:       return "Data ready - conversion in progress";
+      case BCC_STATUS_TIMEOUT_START:  return "Timeout start error";
       default:                        return "Unknown error";
     }
   }
@@ -56,10 +64,9 @@ private:
 };
 
 /* Macro for checking errors with context */
-#define BCC_CHECK_ERROR(expr, cid, reg, op) do { \
+#define BCC_CHECK_ERROR(expr) do { \
   bcc_status_t _err = (expr); \
   if (_err != BCC_STATUS_SUCCESS) { \
-    BccErrorHandler::logError(_err, cid, reg, op); \
     return _err; \
   } \
 } while(0)

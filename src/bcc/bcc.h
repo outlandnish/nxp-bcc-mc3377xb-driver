@@ -1,15 +1,6 @@
 #pragma once
 #include "bcc_utils.h"
 
-/*******************************************************************************
- * User definitions
- ******************************************************************************/
-
- /*! @brief Use \#define BCC_MSG_BIGEND for big-endian format of the TX/RX SPI
- *  buffer ([0] DATA_H, [1] DATA_L, ..., [4] CRC). If BCC_MSG_BIGEND is not
- *  defined, little-endian is used ([0] CRC, ..., [3] DATA_L, [4] DATA_H) */
-#define BCC_MSG_BIGEND
-
 #define BCC_CRC_TBL_SIZE    256U
 
 #define BCC_MSG_SIZE              5U  /* 40b frames */
@@ -215,6 +206,13 @@ typedef enum
   BCC_CID_DEV62         = 62U,   /*!< Cluster ID of device 62. */
   BCC_CID_DEV63         = 63U    /*!< Cluster ID of device 63. */
 } bcc_cid_t;
+
+// define ++ operator for bcc_cid_t to simplify loops
+inline bcc_cid_t& operator++(bcc_cid_t& cid)
+{
+    cid = static_cast<bcc_cid_t>(static_cast<uint8_t>(cid) + 1U);
+    return cid;
+}
 
 /*! @brief BCC communication mode.  */
 typedef enum
