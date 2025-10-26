@@ -187,8 +187,6 @@ BatteryCellController::BatteryCellController(TPLSPI *tpl, bcc_device_t devices[]
   this->intb_pin = intb_pin;
   this->cs_tx_pin = tpl->getCSPin();
 
-  Serial.printf("BCC Constructor: enable_pin=0x%X, intb_pin=0x%X\n", enable_pin, intb_pin);
-
   pinMode(this->enable_pin, OUTPUT);
   digitalWrite(this->enable_pin, HIGH);
 
@@ -198,11 +196,11 @@ BatteryCellController::BatteryCellController(TPLSPI *tpl, bcc_device_t devices[]
   // Register instance in first available slot
   if (instances[0] == nullptr) {
     instances[0] = this;
-    Serial.printf("BCC: Registered instance 0, INTB=PE%d\n", this->intb_pin & 0xF);
+    Serial.println("BCC: Registered instance 0");
     attachInterrupt(this->intb_pin, isr_wrapper_0, CHANGE);
   } else if (instances[1] == nullptr) {
     instances[1] = this;
-    Serial.printf("BCC: Registered instance 1, INTB=PE%d\n", this->intb_pin & 0xF);
+    Serial.println("BCC: Registered instance 1");
     attachInterrupt(this->intb_pin, isr_wrapper_1, CHANGE);
   } else {
     Serial.println("ERROR: Maximum 2 BCC instances supported");
