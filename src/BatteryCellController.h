@@ -27,7 +27,10 @@ class BatteryCellController {
 
   uint8_t enable_pin, intb_pin, cs_tx_pin;
   uint8_t int_state;
-  
+
+  // Timeout support for EEPROM operations
+  uint64_t timeout_start_us;
+  uint64_t timeout_duration_us;
 
   void pack_frame(uint16_t data, uint8_t addr, bcc_cid_t cid, uint8_t cmd_count, uint8_t *tx_buf);
   uint8_t calculate_crc(const uint8_t *data, uint8_t size);
@@ -135,4 +138,45 @@ class BatteryCellController {
     // EEPROM
     bcc_status_t read_eeprom(bcc_cid_t cid, uint8_t address, uint8_t *data);
     bcc_status_t write_eeprom(bcc_cid_t cid, uint8_t address, uint8_t data);
+
+    // System diagnostics (SYS_DIAG register)
+    bcc_status_t set_cell_balance_open_load_detection(bcc_cid_t cid, bool even_switches, bool odd_switches);
+    bcc_status_t set_cell_terminal_open_load_detection(bcc_cid_t cid, bool even_switches, bool odd_switches);
+    bcc_status_t set_ov_uv_diagnostic(bcc_cid_t cid, bool enable);
+    bcc_status_t set_terminal_leakage_diagnostic(bcc_cid_t cid, bool enable, bool inverted_polarity);
+    bcc_status_t set_differential_accuracy_diagnostic(bcc_cid_t cid, bool enable);
+    bcc_status_t set_anx_temp_diagnostic(bcc_cid_t cid, bool enable);
+    bcc_status_t set_anx_open_load_diagnostic(bcc_cid_t cid, bool enable);
+    bcc_status_t set_isense_open_load_diagnostic(bcc_cid_t cid, bool enable);
+    bcc_status_t set_current_mux(bcc_cid_t cid, bcc_i_mux_t mux_selection);
+    bcc_status_t set_fault_pin_control(bcc_cid_t cid, bool forced_high);
+
+    // ADC configuration
+    bcc_status_t set_adc_resolution(bcc_cid_t cid, bcc_adc_resolution_t adc1a_res, bcc_adc_resolution_t adc1b_res, bcc_adc_resolution_t adc2_res);
+    bcc_status_t set_pga_gain(bcc_cid_t cid, bcc_pga_gain_t gain);
+    bcc_status_t get_pga_gain_status(bcc_cid_t cid, bcc_pga_gain_t *current_gain, bool *auto_mode);
+    bcc_status_t set_sample_averaging(bcc_cid_t cid, bcc_avg_samples_t avg_count);
+
+    // Coulomb counter advanced control
+    bcc_status_t reset_coulomb_counter(bcc_cid_t cid);
+    bcc_status_t get_coulomb_counter_status(bcc_cid_t cid, bool *overflow, bool *underflow, bool *over_threshold, bool *sample_overflow);
+    bcc_status_t set_coulomb_counter_mode(bcc_cid_t cid, bool free_running, bool auto_reset_on_read);
+    bcc_status_t set_adc2_offset_compensation(bcc_cid_t cid, int8_t offset_value);
+
+    // System configuration
+    bcc_status_t set_communication_timeout(bcc_cid_t cid, bcc_com_timeout_t timeout);
+    bcc_status_t set_current_measurement_enable(bcc_cid_t cid, bool enable);
+    bcc_status_t set_diag_timeout(bcc_cid_t cid, bcc_diag_timeout_t timeout);
+    bcc_status_t set_fault_wave_mode(bcc_cid_t cid, bool heartbeat_mode);
+    bcc_status_t set_cyclic_timer(bcc_cid_t cid, bcc_cyclic_timer_t timer);
+
+    // Status registers
+    bcc_status_t get_pga_dac_status(bcc_cid_t cid, uint16_t *pga_dac_value);
+    bcc_status_t get_cell_balance_driver_status(bcc_cid_t cid, uint16_t *cb_status);
+    bcc_status_t get_silicon_revision(bcc_cid_t cid, uint16_t *revision);
+
+    // Threshold configuration
+    bcc_status_t set_cell_voltage_thresholds(bcc_cid_t cid, uint8_t cell_index, uint16_t ov_threshold, uint16_t uv_threshold);
+    bcc_status_t set_all_cells_voltage_thresholds(bcc_cid_t cid, uint16_t ov_threshold, uint16_t uv_threshold);
+    bcc_status_t set_temperature_thresholds(bcc_cid_t cid, uint8_t an_index, uint16_t ot_threshold, uint16_t ut_threshold);
 };

@@ -157,6 +157,10 @@ BatteryCellController::BatteryCellController(SPIClass *spi, bcc_device_t device,
   pinMode(this->intb_pin, INPUT_PULLUP);  // Try INPUT or INPUT_PULLDOWN if this doesn't work
   int_state = digitalRead(this->intb_pin);
 
+  // Initialize timeout support
+  timeout_start_us = 0;
+  timeout_duration_us = 0;
+
   // Register instance in first available slot
   if (instances[0] == nullptr) {
     instances[0] = this;
@@ -192,6 +196,10 @@ BatteryCellController::BatteryCellController(TPLSPI *tpl, bcc_device_t devices[]
 
   pinMode(this->intb_pin, INPUT_PULLUP);
   int_state = digitalRead(this->intb_pin);
+
+  // Initialize timeout support
+  timeout_start_us = 0;
+  timeout_duration_us = 0;
 
   // Register instance in first available slot
   if (instances[0] == nullptr) {
@@ -1899,4 +1907,399 @@ BatteryCellController::~BatteryCellController() {
   } else if (instances[1] == this) {
     instances[1] = nullptr;
   }
+}
+
+// Timeout support for EEPROM operations
+bcc_status_t BatteryCellController::start_timeout(uint64_t microseconds) {
+  timeout_start_us = micros();
+  timeout_duration_us = microseconds;
+  return BCC_STATUS_SUCCESS;
+}
+
+bool BatteryCellController::has_timer_expired() {
+  uint64_t current_us = micros();
+  uint64_t elapsed_us;
+
+  // Handle micros() rollover (occurs every ~70 minutes on 32-bit systems)
+  if (current_us >= timeout_start_us) {
+    elapsed_us = current_us - timeout_start_us;
+  } else {
+    // Rollover occurred
+    elapsed_us = (UINT64_MAX - timeout_start_us) + current_us + 1;
+  }
+
+  return (elapsed_us >= timeout_duration_us);
+}
+
+// ============================================================================
+// System Diagnostics (SYS_DIAG register) APIs
+// ============================================================================
+
+bcc_status_t BatteryCellController::set_cell_balance_open_load_detection(bcc_cid_t cid, bool even_switches, bool odd_switches) {
+  uint16_t reg_val = 0;
+  bcc_status_t status;
+
+  status = read_register(cid, BCC_REG_SYS_DIAG_ADDR, 1, &reg_val);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  if (even_switches) {
+    reg_val |= BCC_CB_OL_EVEN_CLOSED;
+  } else {
+    reg_val &= ~BCC_RW_CB_OL_EVEN_MASK;
+  }
+
+  if (odd_switches) {
+    reg_val |= BCC_CB_OL_ODD_CLOSED;
+  } else {
+    reg_val &= ~BCC_RW_CB_OL_ODD_MASK;
+  }
+
+  return write_register(cid, BCC_REG_SYS_DIAG_ADDR, reg_val);
+}
+
+bcc_status_t BatteryCellController::set_cell_terminal_open_load_detection(bcc_cid_t cid, bool even_switches, bool odd_switches) {
+  uint16_t reg_val = 0;
+  bcc_status_t status;
+
+  status = read_register(cid, BCC_REG_SYS_DIAG_ADDR, 1, &reg_val);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  if (even_switches) {
+    reg_val |= BCC_CT_OL_EVEN_CLOSED;
+  } else {
+    reg_val &= ~BCC_RW_CT_OL_EVEN_MASK;
+  }
+
+  if (odd_switches) {
+    reg_val |= BCC_CT_OL_ODD_CLOSED;
+  } else {
+    reg_val &= ~BCC_RW_CT_OL_ODD_MASK;
+  }
+
+  return write_register(cid, BCC_REG_SYS_DIAG_ADDR, reg_val);
+}
+
+bcc_status_t BatteryCellController::set_ov_uv_diagnostic(bcc_cid_t cid, bool enable) {
+  return update_register(cid, BCC_REG_SYS_DIAG_ADDR, BCC_RW_CT_OV_UV_MASK,
+                        enable ? BCC_CT_OV_UV_ENABLED : BCC_CT_OV_UV_DISABLED);
+}
+
+bcc_status_t BatteryCellController::set_terminal_leakage_diagnostic(bcc_cid_t cid, bool enable, bool inverted_polarity) {
+  uint16_t reg_val = 0;
+  bcc_status_t status;
+
+  status = read_register(cid, BCC_REG_SYS_DIAG_ADDR, 1, &reg_val);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  if (enable) {
+    reg_val |= BCC_CT_LEAK_DIAG_DIFF;
+  } else {
+    reg_val &= ~BCC_RW_CT_LEAK_DIAG_MASK;
+  }
+
+  if (inverted_polarity) {
+    reg_val |= BCC_POL_INVERTED;
+  } else {
+    reg_val &= ~BCC_RW_POLARITY_MASK;
+  }
+
+  return write_register(cid, BCC_REG_SYS_DIAG_ADDR, reg_val);
+}
+
+bcc_status_t BatteryCellController::set_differential_accuracy_diagnostic(bcc_cid_t cid, bool enable) {
+  return update_register(cid, BCC_REG_SYS_DIAG_ADDR, BCC_RW_DA_DIAG_MASK,
+                        enable ? BCC_DA_DIAG_CHECK : BCC_DA_DIAG_NO_CHECK);
+}
+
+bcc_status_t BatteryCellController::set_anx_temp_diagnostic(bcc_cid_t cid, bool enable) {
+  return update_register(cid, BCC_REG_SYS_DIAG_ADDR, BCC_RW_ANX_TEMP_DIAG_MASK,
+                        enable ? BCC_ANX_DIAG_SW_CLOSED : BCC_ANX_DIAG_SW_OPEN);
+}
+
+bcc_status_t BatteryCellController::set_anx_open_load_diagnostic(bcc_cid_t cid, bool enable) {
+  return update_register(cid, BCC_REG_SYS_DIAG_ADDR, BCC_RW_ANX_OLDIAG_MASK,
+                        enable ? BCC_ANX_OL_DIAG_ENABLED : BCC_ANX_OL_DIAG_DISABLED);
+}
+
+bcc_status_t BatteryCellController::set_isense_open_load_diagnostic(bcc_cid_t cid, bool enable) {
+  return update_register(cid, BCC_REG_SYS_DIAG_ADDR, BCC_RW_ISENSE_OL_DIAG_MASK,
+                        enable ? BCC_ISENSE_OL_DIAG_ENABLED : BCC_ISENSE_OL_DIAG_DISABLED);
+}
+
+bcc_status_t BatteryCellController::set_current_mux(bcc_cid_t cid, bcc_i_mux_t mux_selection) {
+  uint16_t mux_val;
+
+  switch (mux_selection) {
+    case BCC_I_MUX_ISENSE:
+      mux_val = BCC_IMUX_ISENSE;
+      break;
+    case BCC_I_MUX_GPIO5_6:
+      mux_val = BCC_IMUX_GPIO5_6;
+      break;
+    case BCC_I_MUX_VREF_DIAG:
+      mux_val = BCC_IMUX_DIFF_REF;
+      break;
+    case BCC_I_MUX_PGA_ZERO:
+      mux_val = BCC_IMUX_PGA_ZERO;
+      break;
+    default:
+      return BCC_STATUS_PARAM_RANGE;
+  }
+
+  return update_register(cid, BCC_REG_SYS_DIAG_ADDR, BCC_RW_I_MUX_MASK, mux_val);
+}
+
+bcc_status_t BatteryCellController::set_fault_pin_control(bcc_cid_t cid, bool forced_high) {
+  return update_register(cid, BCC_REG_SYS_DIAG_ADDR, BCC_RW_FAULT_DIAG_MASK,
+                        forced_high ? BCC_FAULT_PIN_FORCED_HIGH : BCC_FAULT_PIN_PACK_CTRL);
+}
+
+// ============================================================================
+// ADC Configuration APIs
+// ============================================================================
+
+bcc_status_t BatteryCellController::set_adc_resolution(bcc_cid_t cid, bcc_adc_resolution_t adc1a_res,
+                                                       bcc_adc_resolution_t adc1b_res, bcc_adc_resolution_t adc2_res) {
+  uint16_t reg_val = 0;
+  bcc_status_t status;
+
+  status = read_register(cid, BCC_REG_ADC_CFG_ADDR, 1, &reg_val);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  // Clear resolution bits
+  reg_val &= ~(BCC_RW_ADC1_A_DEF_MASK | BCC_RW_ADC1_B_DEF_MASK | BCC_RW_ADC2_DEF_MASK);
+
+  // Set new resolution values
+  reg_val |= ((uint16_t)adc1a_res << BCC_RW_ADC1_A_DEF_SHIFT) & BCC_RW_ADC1_A_DEF_MASK;
+  reg_val |= ((uint16_t)adc1b_res << BCC_RW_ADC1_B_DEF_SHIFT) & BCC_RW_ADC1_B_DEF_MASK;
+  reg_val |= ((uint16_t)adc2_res << BCC_RW_ADC2_DEF_SHIFT) & BCC_RW_ADC2_DEF_MASK;
+
+  return write_register(cid, BCC_REG_ADC_CFG_ADDR, reg_val);
+}
+
+bcc_status_t BatteryCellController::set_pga_gain(bcc_cid_t cid, bcc_pga_gain_t gain) {
+  uint16_t gain_val;
+
+  switch (gain) {
+    case BCC_PGA_GAIN_4:
+      gain_val = BCC_ADC2_PGA_4;
+      break;
+    case BCC_PGA_GAIN_16:
+      gain_val = BCC_ADC2_PGA_16;
+      break;
+    case BCC_PGA_GAIN_64:
+      gain_val = BCC_ADC2_PGA_64;
+      break;
+    case BCC_PGA_GAIN_256:
+      gain_val = BCC_ADC2_PGA_256;
+      break;
+    case BCC_PGA_GAIN_AUTO:
+      gain_val = BCC_ADC2_PGA_AUTO;
+      break;
+    default:
+      return BCC_STATUS_PARAM_RANGE;
+  }
+
+  return update_register(cid, BCC_REG_ADC_CFG_ADDR, BCC_W_PGA_GAIN_MASK, gain_val);
+}
+
+bcc_status_t BatteryCellController::get_pga_gain_status(bcc_cid_t cid, bcc_pga_gain_t *current_gain, bool *auto_mode) {
+  uint16_t reg_val = 0;
+  bcc_status_t status;
+
+  if (current_gain == nullptr || auto_mode == nullptr) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  status = read_register(cid, BCC_REG_ADC_CFG_ADDR, 1, &reg_val);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  // Extract gain status
+  uint16_t gain_bits = (reg_val & BCC_R_PGA_GAIN_S_MASK) >> BCC_R_PGA_GAIN_S_SHIFT;
+  *current_gain = (bcc_pga_gain_t)gain_bits;
+
+  // Check if in auto mode
+  *auto_mode = (reg_val & BCC_R_PGA_GAIN_S_MASK) == (0x01U << 10);  // Bit 10 indicates auto mode
+
+  return BCC_STATUS_SUCCESS;
+}
+
+bcc_status_t BatteryCellController::set_sample_averaging(bcc_cid_t cid, bcc_avg_samples_t avg_count) {
+  uint16_t avg_val = ((uint16_t)avg_count << BCC_RW_TAG_ID_SHIFT) & BCC_RW_TAG_ID_MASK;
+  return update_register(cid, BCC_REG_ADC_CFG_ADDR, BCC_RW_TAG_ID_MASK, avg_val);
+}
+
+// ============================================================================
+// Coulomb Counter Advanced Control APIs
+// ============================================================================
+
+bcc_status_t BatteryCellController::reset_coulomb_counter(bcc_cid_t cid) {
+  return update_register(cid, BCC_REG_ADC_CFG_ADDR, BCC_W_CC_RST_MASK, BCC_CC_RESET);
+}
+
+bcc_status_t BatteryCellController::get_coulomb_counter_status(bcc_cid_t cid, bool *overflow, bool *underflow,
+                                                               bool *over_threshold, bool *sample_overflow) {
+  uint16_t reg_val = 0;
+  bcc_status_t status;
+
+  if (overflow == nullptr || underflow == nullptr || over_threshold == nullptr || sample_overflow == nullptr) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  status = read_register(cid, BCC_REG_ADC2_OFFSET_COMP_ADDR, 1, &reg_val);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  *overflow = (reg_val & BCC_R_CC_P_OVF_MASK) != 0;
+  *underflow = (reg_val & BCC_R_CC_N_OVF_MASK) != 0;
+  *over_threshold = (reg_val & BCC_R_CC_OVT_MASK) != 0;
+  *sample_overflow = (reg_val & BCC_R_SAMP_OVF_MASK) != 0;
+
+  return BCC_STATUS_SUCCESS;
+}
+
+bcc_status_t BatteryCellController::set_coulomb_counter_mode(bcc_cid_t cid, bool free_running, bool auto_reset_on_read) {
+  uint16_t reg_val = 0;
+  bcc_status_t status;
+
+  status = read_register(cid, BCC_REG_ADC2_OFFSET_COMP_ADDR, 1, &reg_val);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  if (free_running) {
+    reg_val |= BCC_FREE_CC_ROLL_OVER;
+  } else {
+    reg_val &= ~BCC_RW_FREE_CNT_MASK;
+    reg_val |= BCC_FREE_CC_CLAMP;
+  }
+
+  if (auto_reset_on_read) {
+    reg_val |= BCC_READ_CC_RESET;
+  } else {
+    reg_val &= ~BCC_RW_CC_RST_CFG_MASK;
+    reg_val |= BCC_READ_CC_NO_ACTION;
+  }
+
+  return write_register(cid, BCC_REG_ADC2_OFFSET_COMP_ADDR, reg_val);
+}
+
+bcc_status_t BatteryCellController::set_adc2_offset_compensation(bcc_cid_t cid, int8_t offset_value) {
+  uint16_t reg_val = 0;
+  bcc_status_t status;
+
+  status = read_register(cid, BCC_REG_ADC2_OFFSET_COMP_ADDR, 1, &reg_val);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  // Clear offset bits and set new value
+  reg_val &= ~BCC_RW_ADC2_OFFSET_COMP_MASK;
+  reg_val |= ((uint16_t)offset_value) & BCC_RW_ADC2_OFFSET_COMP_MASK;
+
+  return write_register(cid, BCC_REG_ADC2_OFFSET_COMP_ADDR, reg_val);
+}
+
+// ============================================================================
+// System Configuration APIs
+// ============================================================================
+
+bcc_status_t BatteryCellController::set_communication_timeout(bcc_cid_t cid, bcc_com_timeout_t timeout) {
+  return update_register(cid, BCC_REG_SYS_CFG2_ADDR, BCC_RW_TIMEOUT_COMM_MASK, (uint16_t)timeout);
+}
+
+bcc_status_t BatteryCellController::set_current_measurement_enable(bcc_cid_t cid, bool enable) {
+  return update_register(cid, BCC_REG_SYS_CFG1_ADDR, BCC_RW_I_MEAS_EN_MASK,
+                        enable ? BCC_I_MEAS_ENABLED : BCC_I_MEAS_DISABLED);
+}
+
+bcc_status_t BatteryCellController::set_diag_timeout(bcc_cid_t cid, bcc_diag_timeout_t timeout) {
+  return update_register(cid, BCC_REG_SYS_CFG1_ADDR, BCC_RW_DIAG_TIMEOUT_MASK, (uint16_t)timeout);
+}
+
+bcc_status_t BatteryCellController::set_fault_wave_mode(bcc_cid_t cid, bool heartbeat_mode) {
+  return update_register(cid, BCC_REG_SYS_CFG1_ADDR, BCC_RW_FAULT_WAVE_MASK,
+                        heartbeat_mode ? BCC_FAULT_WAVE_ENABLED : BCC_FAULT_WAVE_DISABLED);
+}
+
+bcc_status_t BatteryCellController::set_cyclic_timer(bcc_cid_t cid, bcc_cyclic_timer_t timer) {
+  return update_register(cid, BCC_REG_SYS_CFG1_ADDR, BCC_RW_CYCLIC_TIMER_MASK, (uint16_t)timer);
+}
+
+// ============================================================================
+// Status Register Read APIs
+// ============================================================================
+
+bcc_status_t BatteryCellController::get_pga_dac_status(bcc_cid_t cid, uint16_t *pga_dac_value) {
+  if (pga_dac_value == nullptr) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  // I_STATUS register is at address 0x22
+  return read_register(cid, 0x22U, 1, pga_dac_value);
+}
+
+bcc_status_t BatteryCellController::get_cell_balance_driver_status(bcc_cid_t cid, uint16_t *cb_status) {
+  if (cb_status == nullptr) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  // CB_DRV_STS register is at address 0x1C
+  return read_register(cid, 0x1CU, 1, cb_status);
+}
+
+bcc_status_t BatteryCellController::get_silicon_revision(bcc_cid_t cid, uint16_t *revision) {
+  if (revision == nullptr) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  // SILICON_REV register is at address 0x6B
+  return read_register(cid, 0x6BU, 1, revision);
+}
+
+// ============================================================================
+// Threshold Configuration APIs
+// ============================================================================
+
+bcc_status_t BatteryCellController::set_cell_voltage_thresholds(bcc_cid_t cid, uint8_t cell_index,
+                                                                uint16_t ov_threshold, uint16_t uv_threshold) {
+  if (cell_index < 1 || cell_index > 14) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  bcc_status_t status;
+
+  // TH_CTx registers start at 0x4C for CT14 and go down to 0x59 for CT1
+  // Address formula: 0x4C + (14 - cell_index)
+  uint8_t threshold_addr = 0x4CU + (14U - cell_index);
+
+  // Read current threshold register
+  uint16_t reg_val = 0;
+  status = read_register(cid, threshold_addr, 1, &reg_val);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  // The threshold register format has OV in upper byte and UV in lower byte
+  reg_val = (ov_threshold & 0xFF00U) | (uv_threshold & 0x00FFU);
+
+  return write_register(cid, threshold_addr, reg_val);
+}
+
+bcc_status_t BatteryCellController::set_all_cells_voltage_thresholds(bcc_cid_t cid, uint16_t ov_threshold, uint16_t uv_threshold) {
+  // TH_ALL_CT register is at address 0x4B
+  uint16_t reg_val = (ov_threshold & 0xFF00U) | (uv_threshold & 0x00FFU);
+  return write_register(cid, 0x4BU, reg_val);
+}
+
+bcc_status_t BatteryCellController::set_temperature_thresholds(bcc_cid_t cid, uint8_t an_index,
+                                                               uint16_t ot_threshold, uint16_t ut_threshold) {
+  if (an_index > 6) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  bcc_status_t status;
+
+  // TH_ANx_OT registers start at 0x5A for AN6 and go to 0x60 for AN0
+  // TH_ANx_UT registers start at 0x61 for AN6 and go to 0x67 for AN0
+  uint8_t ot_addr = 0x5AU + (6U - an_index);
+  uint8_t ut_addr = 0x61U + (6U - an_index);
+
+  status = write_register(cid, ot_addr, ot_threshold);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  return write_register(cid, ut_addr, ut_threshold);
 }

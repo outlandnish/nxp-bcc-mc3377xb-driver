@@ -1,5 +1,6 @@
 #pragma once
 #include "bcc_utils.h"
+#include "bcc_mc3377x.h"
 
 #define BCC_CRC_TBL_SIZE    256U
 
@@ -318,6 +319,46 @@ typedef enum
   BCC_TEMP_CELSIUS        = 1U,   /*!< Result resolution: 0.1 �C. */
   BCC_TEMP_FAHRENHEIT     = 2U    /*!< Result resolution: 0.1 �F. */
 } bcc_temp_unit_t;
+
+/*! @brief ADC resolution configuration. */
+typedef enum
+{
+  BCC_RES_13BIT           = 0U,   /*!< 13-bit resolution. */
+  BCC_RES_14BIT           = 1U,   /*!< 14-bit resolution. */
+  BCC_RES_15BIT           = 2U,   /*!< 15-bit resolution. */
+  BCC_RES_16BIT           = 3U    /*!< 16-bit resolution. */
+} bcc_adc_resolution_t;
+
+/*! @brief PGA gain configuration. */
+typedef enum
+{
+  BCC_PGA_GAIN_4          = 0U,   /*!< PGA gain of 4. */
+  BCC_PGA_GAIN_16         = 1U,   /*!< PGA gain of 16. */
+  BCC_PGA_GAIN_64         = 2U,   /*!< PGA gain of 64. */
+  BCC_PGA_GAIN_256        = 3U,   /*!< PGA gain of 256. */
+  BCC_PGA_GAIN_AUTO       = 4U    /*!< Automatic gain selection. */
+} bcc_pga_gain_t;
+
+/*! @brief Current measurement multiplexer selection. */
+typedef enum
+{
+  BCC_I_MUX_ISENSE        = 0U,   /*!< ISENSE+, ISENSE- inputs. */
+  BCC_I_MUX_GPIO5_6       = 1U,   /*!< GPIO5, GPIO6 inputs. */
+  BCC_I_MUX_VREF_DIAG     = 2U,   /*!< Calibrated internal reference. */
+  BCC_I_MUX_PGA_ZERO      = 3U    /*!< PGA zero (differential inputs terminated to ground). */
+} bcc_i_mux_t;
+
+/*! @brief Communication timeout configuration (uses BCC_TIMEOUT_COMM_* defines). */
+typedef uint16_t bcc_com_timeout_t;
+
+/*! @brief Diagnostic mode timeout configuration (uses BCC_DIAG_TIMEOUT_* defines). */
+typedef uint16_t bcc_diag_timeout_t;
+
+/*! @brief Cyclic timer configuration (uses BCC_CYCLIC_TIMER_* defines). */
+typedef uint16_t bcc_cyclic_timer_t;
+
+/*! @brief Sample averaging configuration (alias for bcc_avg_t for consistency). */
+typedef bcc_avg_t bcc_avg_samples_t;
 /*! @} */
 
 /* Configure struct types definition. */
