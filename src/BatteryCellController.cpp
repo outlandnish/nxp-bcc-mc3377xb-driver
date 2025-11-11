@@ -2282,7 +2282,7 @@ bcc_status_t BatteryCellController::set_cell_voltage_thresholds(bcc_cid_t cid, u
 bcc_status_t BatteryCellController::set_all_cells_voltage_thresholds(bcc_cid_t cid, uint16_t ov_threshold, uint16_t uv_threshold) {
   // TH_ALL_CT register is at address 0x4B
   uint16_t reg_val = (ov_threshold & 0xFF00U) | (uv_threshold & 0x00FFU);
-  return write_register(cid, 0x4BU, reg_val);
+  return write_register(cid, BCC_REG_TH_ALL_CT_ADDR, reg_val);
 }
 
 bcc_status_t BatteryCellController::set_temperature_thresholds(bcc_cid_t cid, uint8_t an_index,
@@ -2302,4 +2302,203 @@ bcc_status_t BatteryCellController::set_temperature_thresholds(bcc_cid_t cid, ui
   if (status != BCC_STATUS_SUCCESS) return status;
 
   return write_register(cid, ut_addr, ut_threshold);
+}
+bcc_status_t BatteryCellController::set_isense_overcurrent_threshold(bcc_cid_t cid, uint16_t threshold) {
+  // TH_ISENSE_OC register is at address 0x68
+  return write_register(cid, BCC_REG_TH_ISENSE_OC_ADDR, threshold);
+}
+
+bcc_status_t BatteryCellController::set_coulomb_counter_threshold(bcc_cid_t cid, int32_t threshold) {
+  bcc_status_t status;
+
+  // Split 32-bit threshold into two 16-bit registers
+  // TH_COULOMB_CNT_MSB at 0x69, TH_COULOMB_CNT_LSB at 0x6A
+  uint16_t msb = (uint16_t)((threshold >> 16) & 0xFFFFU);
+  uint16_t lsb = (uint16_t)(threshold & 0xFFFFU);
+
+  status = write_register(cid, BCC_REG_TH_COULOMB_CNT_MSB_ADDR, msb);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  return write_register(cid, BCC_REG_TH_COULOMB_CNT_LSB_ADDR, lsb);
+}
+
+// ============================================================================
+// OV/UV Enable Control APIs
+// ============================================================================
+
+bcc_status_t BatteryCellController::set_cell_ovuv_enable(bcc_cid_t cid, uint8_t cell_index, bool enable) {
+  if (cell_index < 1 || cell_index > 14) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  uint16_t mask = BCC_RW_CTX_OVUV_EN_MASK(cell_index);
+  uint16_t value = enable ? BCC_CTX_OVUV_ENABLED(cell_index) : BCC_CTX_OVUV_DISABLED(cell_index);
+
+  return update_register(cid, BCC_REG_OV_UV_EN_ADDR, mask, value);
+}
+
+bcc_status_t BatteryCellController::set_all_cells_ovuv_enable(bcc_cid_t cid, uint16_t cell_mask) {
+  // Mask contains bits 0-13 for cells 1-14
+  return write_register(cid, BCC_REG_OV_UV_EN_ADDR, cell_mask);
+}
+
+bcc_status_t BatteryCellController::get_ovuv_enable_status(bcc_cid_t cid, uint16_t *cell_mask) {
+  if (cell_mask == nullptr) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  return read_register(cid, BCC_REG_OV_UV_EN_ADDR, 1, cell_mask);
+}
+
+bcc_status_t BatteryCellController::set_common_threshold_mode(bcc_cid_t cid, bool common_ov, bool common_uv) {
+  uint16_t reg_val = 0;
+  bcc_status_t status;
+
+  status = read_register(cid, BCC_REG_OV_UV_EN_ADDR, 1, &reg_val);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  // Clear and set OV threshold mode
+  if (common_ov) {
+    reg_val |= BCC_CTX_OV_TH_COMMON;
+  } else {
+    reg_val &= ~BCC_RW_COMMON_OV_TH_MASK;
+  }
+
+  // Clear and set UV threshold mode
+  if (common_uv) {
+    reg_val |= BCC_CTX_UV_TH_COMMON;
+  } else {
+    reg_val &= ~BCC_RW_COMMON_UV_TH_MASK;
+  }
+
+  return write_register(cid, BCC_REG_OV_UV_EN_ADDR, reg_val);
+}
+
+// ============================================================================
+// Fault and Wakeup Mask Configuration APIs
+// ============================================================================
+
+bcc_status_t BatteryCellController::set_fault_masks(bcc_cid_t cid, uint16_t fault1_mask,
+                                                     uint16_t fault2_mask, uint16_t fault3_mask) {
+  bcc_status_t status;
+
+  // FAULT_MASK registers at 0x27, 0x28, 0x29
+  status = write_register(cid, 0x27U, fault1_mask);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  status = write_register(cid, 0x28U, fault2_mask);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  return write_register(cid, 0x29U, fault3_mask);
+}
+
+bcc_status_t BatteryCellController::get_fault_masks(bcc_cid_t cid, uint16_t *fault1_mask,
+                                                     uint16_t *fault2_mask, uint16_t *fault3_mask) {
+  if (fault1_mask == nullptr || fault2_mask == nullptr || fault3_mask == nullptr) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  bcc_status_t status;
+  uint16_t masks[3];
+
+  status = read_register(cid, 0x27U, 3, masks);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  *fault1_mask = masks[0];
+  *fault2_mask = masks[1];
+  *fault3_mask = masks[2];
+
+  return BCC_STATUS_SUCCESS;
+}
+
+bcc_status_t BatteryCellController::set_wakeup_masks(bcc_cid_t cid, uint16_t wakeup1_mask,
+                                                      uint16_t wakeup2_mask, uint16_t wakeup3_mask) {
+  bcc_status_t status;
+
+  // WAKEUP_MASK registers at 0x2A, 0x2B, 0x2C
+  status = write_register(cid, BCC_REG_WAKEUP_MASK1_ADDR, wakeup1_mask);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  status = write_register(cid, BCC_REG_WAKEUP_MASK2_ADDR, wakeup2_mask);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  return write_register(cid, BCC_REG_WAKEUP_MASK3_ADDR, wakeup3_mask);
+}
+
+bcc_status_t BatteryCellController::get_wakeup_masks(bcc_cid_t cid, uint16_t *wakeup1_mask,
+                                                      uint16_t *wakeup2_mask, uint16_t *wakeup3_mask) {
+  if (wakeup1_mask == nullptr || wakeup2_mask == nullptr || wakeup3_mask == nullptr) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  bcc_status_t status;
+  uint16_t masks[3];
+
+  status = read_register(cid, BCC_REG_WAKEUP_MASK1_ADDR, 3, masks);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  *wakeup1_mask = masks[0];
+  *wakeup2_mask = masks[1];
+  *wakeup3_mask = masks[2];
+
+  return BCC_STATUS_SUCCESS;
+}
+
+// ============================================================================
+// SYS_CFG2 Advanced Configuration APIs
+// ============================================================================
+
+bcc_status_t BatteryCellController::set_fault_reset_config(bcc_cid_t cid, uint8_t config) {
+  // Config values should use BCC_FLT_RST_CFG_* defines from bcc_mc3377x.h
+  return update_register(cid, BCC_REG_SYS_CFG2_ADDR, BCC_RW_FLT_RST_CFG_MASK,
+                        ((uint16_t)config << BCC_RW_FLT_RST_CFG_SHIFT) & BCC_RW_FLT_RST_CFG_MASK);
+}
+
+bcc_status_t BatteryCellController::set_odd_cell_count(bcc_cid_t cid, bool odd) {
+  return update_register(cid, BCC_REG_SYS_CFG2_ADDR, BCC_RW_NUMB_ODD_MASK,
+                        odd ? BCC_ODD_CELLS : BCC_EVEN_CELLS);
+}
+
+bcc_status_t BatteryCellController::set_hamming_mode(bcc_cid_t cid, bool encode_mode) {
+  return update_register(cid, BCC_REG_SYS_CFG2_ADDR, BCC_RW_HAMM_ENCOD_MASK,
+                        encode_mode ? BCC_HAMM_ENCOD_ENCODE : BCC_HAMM_ENCOD_DECODE);
+}
+
+bcc_status_t BatteryCellController::get_previous_state(bcc_cid_t cid, uint8_t *state) {
+  if (state == nullptr) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  uint16_t reg_val = 0;
+  bcc_status_t status;
+
+  status = read_register(cid, BCC_REG_SYS_CFG2_ADDR, 1, &reg_val);
+  if (status != BCC_STATUS_SUCCESS) return status;
+
+  *state = (uint8_t)((reg_val & BCC_R_PREVIOUS_STATE_MASK) >> BCC_R_PREVIOUS_STATE_SHIFT);
+
+  return BCC_STATUS_SUCCESS;
+}
+
+// ============================================================================
+// Coulomb Counter Sample Count
+// ============================================================================
+
+bcc_status_t BatteryCellController::get_coulomb_counter_samples(bcc_cid_t cid, uint16_t *sample_count) {
+  if (sample_count == nullptr) {
+    return BCC_STATUS_PARAM_RANGE;
+  }
+
+  // CC_NB_SAMPLES register is at address 0x2D
+  return read_register(cid, BCC_REG_CC_NB_SAMPLES_ADDR, 1, sample_count);
+}
+
+// ============================================================================
+// GPIO Configuration (completing missing implementation)
+// ============================================================================
+
+bcc_status_t BatteryCellController::set_gpio_config(bcc_cid_t cid, uint8_t gpio_sel, bool val) {
+  // This function sets a GPIO output value directly
+  // It's essentially an alias for write_gpio for compatibility
+  return write_gpio(cid, gpio_sel, val);
 }

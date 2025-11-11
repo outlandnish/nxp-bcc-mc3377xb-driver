@@ -179,4 +179,27 @@ class BatteryCellController {
     bcc_status_t set_cell_voltage_thresholds(bcc_cid_t cid, uint8_t cell_index, uint16_t ov_threshold, uint16_t uv_threshold);
     bcc_status_t set_all_cells_voltage_thresholds(bcc_cid_t cid, uint16_t ov_threshold, uint16_t uv_threshold);
     bcc_status_t set_temperature_thresholds(bcc_cid_t cid, uint8_t an_index, uint16_t ot_threshold, uint16_t ut_threshold);
+    bcc_status_t set_isense_overcurrent_threshold(bcc_cid_t cid, uint16_t threshold);
+    bcc_status_t set_coulomb_counter_threshold(bcc_cid_t cid, int32_t threshold);
+
+    // OV/UV enable control
+    bcc_status_t set_cell_ovuv_enable(bcc_cid_t cid, uint8_t cell_index, bool enable);
+    bcc_status_t set_all_cells_ovuv_enable(bcc_cid_t cid, uint16_t cell_mask);
+    bcc_status_t get_ovuv_enable_status(bcc_cid_t cid, uint16_t *cell_mask);
+    bcc_status_t set_common_threshold_mode(bcc_cid_t cid, bool common_ov, bool common_uv);
+
+    // Fault and wakeup mask configuration
+    bcc_status_t set_fault_masks(bcc_cid_t cid, uint16_t fault1_mask, uint16_t fault2_mask, uint16_t fault3_mask);
+    bcc_status_t get_fault_masks(bcc_cid_t cid, uint16_t *fault1_mask, uint16_t *fault2_mask, uint16_t *fault3_mask);
+    bcc_status_t set_wakeup_masks(bcc_cid_t cid, uint16_t wakeup1_mask, uint16_t wakeup2_mask, uint16_t wakeup3_mask);
+    bcc_status_t get_wakeup_masks(bcc_cid_t cid, uint16_t *wakeup1_mask, uint16_t *wakeup2_mask, uint16_t *wakeup3_mask);
+
+    // SYS_CFG2 advanced configuration
+    bcc_status_t set_fault_reset_config(bcc_cid_t cid, uint8_t config);
+    bcc_status_t set_odd_cell_count(bcc_cid_t cid, bool odd);
+    bcc_status_t set_hamming_mode(bcc_cid_t cid, bool encode_mode);
+    bcc_status_t get_previous_state(bcc_cid_t cid, uint8_t *state);
+
+    // Coulomb counter
+    bcc_status_t get_coulomb_counter_samples(bcc_cid_t cid, uint16_t *sample_count);
 };
