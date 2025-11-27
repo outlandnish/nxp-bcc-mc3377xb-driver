@@ -30,7 +30,7 @@ Driver library for controlling NXP MC33771B/MC33772B Battery Cell Controllers vi
 
 ### Communication Modes
 - **SPI Mode**: Direct SPI communication to a single device
-- **TPL Mode**: Transformer-based isolated daisy chain communication (recommended for multi-device chains)
+- **TPL Mode**: Daisy chains via TPL communication
 
 ## Installation
 
