@@ -1,5 +1,6 @@
 #include "BatteryCellController.h"
 #include "bcc/bcc_defs.h"
+#include "debug_serial.h"
 
 #if ARDUINO_ARCH_STM32
 #define assert(expr) assert_param(expr)

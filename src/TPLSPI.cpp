@@ -1,4 +1,5 @@
 #include "TPLSPI.h"
+#include "debug_serial.h"
 
 TPLSPI::TPLSPI(SPIClass *tx, SPIClass *rx, uint8_t cs_tx_pin, DMAConfigCallback dma_config_callback)
   : spi_tx(tx), spi_rx(rx), cs_tx_pin(cs_tx_pin), dma_config_callback(dma_config_callback)
