@@ -1,6 +1,20 @@
 #include "BatteryCellController.h"
 #include "bcc/bcc_defs.h"
-#include "debug_serial.h"
+#include <stdarg.h>
+
+void BatteryCellController::dbg_println(const char* msg) {
+  if (debugSerial) debugSerial->println(msg);
+}
+
+void BatteryCellController::dbg_printf(const char* fmt, ...) {
+  if (!debugSerial) return;
+  char buf[128];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  debugSerial->print(buf);
+}
 
 #if ARDUINO_ARCH_STM32
 #define assert(expr) assert_param(expr)
@@ -139,7 +153,7 @@ void BatteryCellController::isr_wrapper_1() {
   }
 }
 
-BatteryCellController::BatteryCellController(SPIClass *spi, bcc_device_t device, uint8_t cell_count, uint8_t enable_pin, uint8_t intb_pin, uint8_t cs_pin, bool loopback) {
+BatteryCellController::BatteryCellController(SPIClass *spi, bcc_device_t device, uint8_t cell_count, uint8_t enable_pin, uint8_t intb_pin, uint8_t cs_pin, bool loopback, HardwareSerial* debugSerial) {
   this->spi = spi;
 
   this->comm_mode = BCC_MODE_SPI;
@@ -158,6 +172,8 @@ BatteryCellController::BatteryCellController(SPIClass *spi, bcc_device_t device,
   pinMode(this->intb_pin, INPUT_PULLUP);  // Try INPUT or INPUT_PULLDOWN if this doesn't work
   int_state = digitalRead(this->intb_pin);
 
+  this->debugSerial = debugSerial;
+
   // Initialize timeout support
   timeout_start_us = 0;
   timeout_duration_us = 0;
@@ -170,11 +186,11 @@ BatteryCellController::BatteryCellController(SPIClass *spi, bcc_device_t device,
     instances[1] = this;
     attachInterrupt(this->intb_pin, isr_wrapper_1, CHANGE);
   } else {
-    Serial.println("ERROR: Maximum 2 BCC instances supported");
+    dbg_println("ERROR: Maximum 2 BCC instances supported");
   }
 }
 
-BatteryCellController::BatteryCellController(TPLSPI *tpl, bcc_device_t devices[], uint8_t device_count, uint8_t cell_count, uint8_t enable_pin, uint8_t intb_pin, bool loopback) {
+BatteryCellController::BatteryCellController(TPLSPI *tpl, bcc_device_t devices[], uint8_t device_count, uint8_t cell_count, uint8_t enable_pin, uint8_t intb_pin, bool loopback, HardwareSerial* debugSerial) {
   this->tpl = tpl;
   this->tpl->begin();
 
@@ -202,17 +218,19 @@ BatteryCellController::BatteryCellController(TPLSPI *tpl, bcc_device_t devices[]
   timeout_start_us = 0;
   timeout_duration_us = 0;
 
+  this->debugSerial = debugSerial;
+
   // Register instance in first available slot
   if (instances[0] == nullptr) {
     instances[0] = this;
-    Serial.println("BCC: Registered instance 0");
+    dbg_println("BCC: Registered instance 0");
     attachInterrupt(this->intb_pin, isr_wrapper_0, CHANGE);
   } else if (instances[1] == nullptr) {
     instances[1] = this;
-    Serial.println("BCC: Registered instance 1");
+    dbg_println("BCC: Registered instance 1");
     attachInterrupt(this->intb_pin, isr_wrapper_1, CHANGE);
   } else {
-    Serial.println("ERROR: Maximum 2 BCC instances supported");
+    dbg_println("ERROR: Maximum 2 BCC instances supported");
   }
 }
 
@@ -284,12 +302,12 @@ bcc_status_t BatteryCellController::begin(const uint16_t devConf[][BCC_INIT_CONF
   /* Enable MC33664 device in TPL mode. */
   if (this->comm_mode == BCC_MODE_TPL) {
     if ((status = this->enable_tpl()) != BCC_STATUS_SUCCESS) {
-      Serial.printf("TPL mode enable failed: %d\r\n", status);
+      dbg_printf("TPL mode enable failed: %d\r\n", status);
       return status;
     }
   }
 
-  Serial.println("Initializing devices...");
+  dbg_println("Initializing devices...");
 
   return init_devices(devConf);
 }
@@ -326,7 +344,7 @@ bcc_status_t BatteryCellController::enable_tpl() {
   interrupts();
 
   if (is_empty) {
-    Serial.println("Timeout waiting for INTB low after enabling TPL.");
+    dbg_println("Timeout waiting for INTB low after enabling TPL.");
     return BCC_STATUS_COM_TIMEOUT;
   }
 
@@ -356,7 +374,7 @@ bcc_status_t BatteryCellController::enable_tpl() {
   interrupts();
 
   if (is_empty) {
-    Serial.println("Timeout waiting for INTB high after enabling TPL.");
+    dbg_println("Timeout waiting for INTB high after enabling TPL.");
     return BCC_STATUS_COM_TIMEOUT;
   }
 
@@ -381,22 +399,22 @@ bcc_status_t BatteryCellController::init_devices(const uint16_t devConf[][BCC_IN
   uint8_t device;
   bcc_status_t status;
 
-  Serial.println("Waking up devices...");
+  dbg_println("Waking up devices...");
   wake_up();
 
-  Serial.println("Running software reset...");
+  dbg_println("Running software reset...");
   status = software_reset((comm_mode == BCC_MODE_TPL) ? BCC_CID_UNASSIG : BCC_CID_DEV1);
   if (status != BCC_STATUS_SUCCESS) {
-    Serial.printf("Software reset failed: %d\r\n", status);
+    dbg_printf("Software reset failed: %d\r\n", status);
     return status;
   }
 
   delay(BCC_T_VPWR_READY_MS);
 
-  Serial.println("Assigning CIDs...");
+  dbg_println("Assigning CIDs...");
   status = assign_cid(BCC_CID_DEV1);
   if (status != BCC_STATUS_SUCCESS) {
-    Serial.printf("CID assignment failed: %d\r\n", status);
+    dbg_printf("CID assignment failed: %d\r\n", status);
     return status;
   }
 
@@ -409,17 +427,17 @@ bcc_status_t BatteryCellController::init_devices(const uint16_t devConf[][BCC_IN
 
     status = assign_cid((bcc_cid_t)device);
     if (status != BCC_STATUS_SUCCESS) {
-      Serial.printf("CID assignment failed for device %d: %d\r\n", device, status);
+      dbg_printf("CID assignment failed for device %d: %d\r\n", device, status);
       return status;
     }
   }
 
   // Initialize registers if configuration is provided (matches NXP BCC_Init pattern)
   if (devConf != nullptr) {
-    Serial.println("Initializing registers...");
+    dbg_println("Initializing registers...");
     status = init_registers(devConf);
     if (status != BCC_STATUS_SUCCESS) {
-      Serial.printf("Register initialization failed: %d\r\n", status);
+      dbg_printf("Register initialization failed: %d\r\n", status);
       return status;
     }
   }
@@ -534,7 +552,7 @@ bcc_status_t BatteryCellController::assign_cid(bcc_cid_t cid) {
 
   /* Check if unassigned node replies. This is the first reading after device
     * reset. */
-  Serial.println("Checking for unassigned CID...");
+  dbg_println("Checking for unassigned CID...");
   error = read_register(BCC_CID_UNASSIG, BCC_REG_INIT_ADDR, 1U, &readVal);
 
   /* Note: in SPI communication mode the device responds with all zero and the
@@ -542,7 +560,7 @@ bcc_status_t BatteryCellController::assign_cid(bcc_cid_t cid) {
   if ((error != BCC_STATUS_SUCCESS) && (error != BCC_STATUS_NULL_RESP))
     return error;
 
-  Serial.printf("Unassigned CID response value: %d\r\n", readVal);
+  dbg_printf("Unassigned CID response value: %d\r\n", readVal);
 
   /* Assign CID and close the bus switch to be able to initialize next BCC
     * device. Bus switch of the last BCC in chain stays opened. In SPI mode,
@@ -554,27 +572,27 @@ bcc_status_t BatteryCellController::assign_cid(bcc_cid_t cid) {
   else
     writeVal = BCC_SET_CID(readVal, (uint8_t)cid) | BCC_BUS_SWITCH_DISABLED | BCC_RTERM_COMM_SW;
 
-  Serial.printf("Assigning CID %d with value %d...\r\n", cid, writeVal);
+  dbg_printf("Assigning CID %d with value %d...\r\n", cid, writeVal);
   error = write_register(cid, BCC_REG_INIT_ADDR, writeVal, NULL);
   if (error == BCC_STATUS_SUCCESS)
   {
       /* Check if assigned node replies. */
-      Serial.printf("Verifying CID %d...\r\n", cid);
+      dbg_printf("Verifying CID %d...\r\n", cid);
       error = read_register(cid, BCC_REG_INIT_ADDR, 1U, &readVal);
   }
 
   if (error != BCC_STATUS_SUCCESS)
   {
-      Serial.printf("CID assignment failed, retrying...\r\n");
+      dbg_printf("CID assignment failed, retrying...\r\n");
       /* Wait and try to assign CID once again. */
       delayMicroseconds(750U);
 
-      Serial.printf("Retrying CID assignment...\r\n");
+      dbg_printf("Retrying CID assignment...\r\n");
       error = write_register(BCC_CID_UNASSIG, BCC_REG_INIT_ADDR, writeVal, NULL);
       if (error == BCC_STATUS_SUCCESS)
       {
           /* Check if assigned node replies. */
-          Serial.println("Verifying CID on retry...");
+          dbg_println("Verifying CID on retry...");
           error = read_register(cid, BCC_REG_INIT_ADDR, 1U, &readVal);
       }
   }
@@ -909,7 +927,7 @@ bcc_status_t BatteryCellController::write_register_tpl(bcc_cid_t cid, uint8_t re
   //   Serial.print(tx_buffer[i], HEX);
   //   Serial.print(" ");
   // }
-  // Serial.println();
+  // dbg_println();
 
   status = transfer_tpl(tx_buffer, this->rx_buffer, 2);  // 2 frames: echo + response
   /* Skip an echo frame. */
@@ -949,7 +967,7 @@ bcc_status_t BatteryCellController::write_global_tpl(uint8_t reg_addr, uint16_t 
   //   Serial.print(tx_buffer[i], HEX);
   //   Serial.print(" ");
   // }
-  // Serial.println();
+  // dbg_println();
 
   // Note: Global write commands do NOT return echo frames according to MC33664 protocol
   // We still need to call transfer_tpl to send the TX data, but we ignore the RX response
@@ -957,12 +975,12 @@ bcc_status_t BatteryCellController::write_global_tpl(uint8_t reg_addr, uint16_t 
 
   // For global writes, ignore timeout errors - the MC33664 might not send any response
   if (status == BCC_STATUS_COM_TIMEOUT) {
-    Serial.println("Global write: No response (expected behavior)");
+    dbg_println("Global write: No response (expected behavior)");
     return BCC_STATUS_SUCCESS;
   }
 
   if (status != BCC_STATUS_SUCCESS) {
-    Serial.printf("Global register write failed: %d\r\n", status);
+    dbg_printf("Global register write failed: %d\r\n", status);
     return status;
   }
 
@@ -983,7 +1001,7 @@ bcc_status_t BatteryCellController::transfer_tpl(uint8_t tx[], uint8_t rx[], uin
   auto error = tpl->transfer(tx, rx, rx_transfer_count);
 
   if (error != BCC_STATUS_SUCCESS) {
-    Serial.printf("Error in transfer: %d\n", error);
+    dbg_printf("Error in transfer: %d\n", error);
     return error;
   }
 

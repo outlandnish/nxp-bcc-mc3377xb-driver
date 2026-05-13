@@ -1,8 +1,22 @@
 #include "TPLSPI.h"
-#include "debug_serial.h"
+#include <stdarg.h>
 
-TPLSPI::TPLSPI(SPIClass *tx, SPIClass *rx, uint8_t cs_tx_pin, DMAConfigCallback dma_config_callback)
-  : spi_tx(tx), spi_rx(rx), cs_tx_pin(cs_tx_pin), dma_config_callback(dma_config_callback)
+void TPLSPI::dbg_println(const char* msg) {
+  if (debugSerial) debugSerial->println(msg);
+}
+
+void TPLSPI::dbg_printf(const char* fmt, ...) {
+  if (!debugSerial) return;
+  char buf[128];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  debugSerial->print(buf);
+}
+
+TPLSPI::TPLSPI(SPIClass *tx, SPIClass *rx, uint8_t cs_tx_pin, DMAConfigCallback dma_config_callback, HardwareSerial* debugSerial)
+  : spi_tx(tx), spi_rx(rx), cs_tx_pin(cs_tx_pin), dma_config_callback(dma_config_callback), debugSerial(debugSerial)
 {
   pinMode(cs_tx_pin, OUTPUT);
   digitalWrite(cs_tx_pin, HIGH);
@@ -18,16 +32,13 @@ bool TPLSPI::begin() {
   spi_rx->setIsMaster(false);
   spi_tx->setDirection(SPI_DIRECTION_2LINES);
   spi_rx->setDirection(SPI_DIRECTION_2LINES_RXONLY);
-  Serial.println("Starting TX");
   spi_tx->begin();
-  Serial.println("Starting RX");
   spi_rx->begin();
 
   // Configure DMA if callback provided (processor-specific)
   if (this->dma_config_callback != nullptr) {
-    Serial.println("Initializing SPI DMA via callback...");
     if (!this->dma_config_callback(spi_tx, spi_rx)) {
-      Serial.println("Failed to configure DMA");
+      dbg_println("Failed to configure DMA");
       return false;
     }
   }
@@ -77,7 +88,7 @@ bcc_status_t TPLSPI::transfer(uint8_t *tx_buf, uint8_t *rx_buf, uint16_t rx_tran
   // Start TX DMA transfer
   tx_error = HAL_SPI_Transmit_DMA(hspi_tx, tx_buf, BCC_MSG_SIZE);
   if (tx_error != HAL_OK) {
-    Serial.printf("Error starting TX DMA: %d (state=%d, error=0x%08lX)\n",
+    dbg_printf("Error starting TX DMA: %d (state=%d, error=0x%08lX)\n",
                   tx_error, hspi_tx->State, hspi_tx->ErrorCode);
     cs_port->BSRR = cs_pin_mask;  // Set (HIGH)
     HAL_SPI_Abort_IT(hspi_rx);
@@ -95,7 +106,7 @@ bcc_status_t TPLSPI::transfer(uint8_t *tx_buf, uint8_t *rx_buf, uint16_t rx_tran
   cs_port->BSRR = cs_pin_mask;
 
   if (tx_timeout_us <= 0) {
-    Serial.printf("Timeout in TX transmission (state: %d, error: 0x%08lX)\n",
+    dbg_printf("Timeout in TX transmission (state: %d, error: 0x%08lX)\n",
                   hspi_tx->State, hspi_tx->ErrorCode);
     HAL_SPI_Abort_IT(hspi_rx);
     return BCC_STATUS_COM_TIMEOUT;
@@ -115,7 +126,7 @@ bcc_status_t TPLSPI::transfer(uint8_t *tx_buf, uint8_t *rx_buf, uint16_t rx_tran
   uint32_t final_ndtr = hspi_rx->hdmarx->Instance->NDTR;
 
   if (final_ndtr > 0) {
-    Serial.printf("Timeout in waiting for RX DMA (NDTR: %lu, state: %d, error: 0x%08lX)\n",
+    dbg_printf("Timeout in waiting for RX DMA (NDTR: %lu, state: %d, error: 0x%08lX)\n",
                   final_ndtr, rx_state, hspi_rx->ErrorCode);
       // Read DMA stream status register for detailed error info
       DMA_Stream_TypeDef *dma_stream = hspi_rx->hdmarx->Instance;

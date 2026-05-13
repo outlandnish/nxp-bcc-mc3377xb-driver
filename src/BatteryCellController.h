@@ -1,5 +1,6 @@
 #pragma once
 #include "TPLSPI.h"
+#include "HardwareSerial.h"
 #include "bcc/bcc.h"
 #include "bcc/bcc_mc3377x.h"
 #include "bcc/bcc_utils.h"
@@ -27,6 +28,9 @@ class BatteryCellController {
 
   uint8_t enable_pin, intb_pin, cs_tx_pin;
   uint8_t int_state;
+  HardwareSerial* debugSerial;
+  void dbg_println(const char* msg);
+  void dbg_printf(const char* fmt, ...);
 
   // Timeout support for EEPROM operations
   uint64_t timeout_start_us;
@@ -67,8 +71,8 @@ class BatteryCellController {
 
   public:
     bcc_status_t check_crc(const uint8_t *data);
-    BatteryCellController(SPIClass *spi, bcc_device_t device, uint8_t cell_count, uint8_t enable_pin, uint8_t intb_pin, uint8_t cs_pin, bool loopback = false);
-    BatteryCellController(TPLSPI *tpl, bcc_device_t devices[], uint8_t device_count, uint8_t cell_count, uint8_t enable_pin, uint8_t intb_pin, bool loopback = false);
+    BatteryCellController(SPIClass *spi, bcc_device_t device, uint8_t cell_count, uint8_t enable_pin, uint8_t intb_pin, uint8_t cs_pin, bool loopback = false, HardwareSerial* debugSerial = nullptr);
+    BatteryCellController(TPLSPI *tpl, bcc_device_t devices[], uint8_t device_count, uint8_t cell_count, uint8_t enable_pin, uint8_t intb_pin, bool loopback = false, HardwareSerial* debugSerial = nullptr);
     ~BatteryCellController();
 
     bcc_status_t begin(const uint16_t devConf[][BCC_INIT_CONF_REG_CNT] = nullptr);

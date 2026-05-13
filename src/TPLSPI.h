@@ -1,6 +1,7 @@
 #pragma once
 #include "Arduino.h"
 #include "SPI.h"
+#include "HardwareSerial.h"
 #include "bcc/bcc.h"
 #include "bcc/bcc_defs.h"
 
@@ -25,6 +26,9 @@ class TPLSPI {
     SPIClass *spi_rx;
     uint8_t cs_tx_pin;
     DMAConfigCallback dma_config_callback;
+    HardwareSerial* debugSerial;
+    void dbg_println(const char* msg);
+    void dbg_printf(const char* fmt, ...);
 
     // Fast GPIO access for CS pin (bypasses Arduino digitalWrite)
     GPIO_TypeDef *cs_port;
@@ -32,7 +36,7 @@ class TPLSPI {
 
   public:
     // STM32 constructor
-    TPLSPI(SPIClass *tx, SPIClass *rx, uint8_t cs_tx_pin, DMAConfigCallback dma_config_callback = nullptr);
+    TPLSPI(SPIClass *tx, SPIClass *rx, uint8_t cs_tx_pin, DMAConfigCallback dma_config_callback = nullptr, HardwareSerial* debugSerial = nullptr);
 
     bool beginTransaction();
     void endTransaction();
